@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "migracao"
+version = "0.1.0"
+description = "Modelo computacional de migração interna dirigida por diferencial de riqueza entre cidades"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+# [project.scripts] — o console script `migracao` será adicionado junto com a CLI
+# (etapa seguinte: migracao/cli.py).
+
+[tool.setuptools]
+packages = ["migracao"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
