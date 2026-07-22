@@ -96,6 +96,51 @@ Formato do CSV: `nome, x, y, A, amenidade, populacao_inicial`.
 
 ---
 
+## CLI
+
+```bash
+# Simula e salva painel/fluxos/métricas/O-D + figuras
+python -m migracao run --cidades data/cidades.csv --periodos 200 --out out/
+
+# Varredura de sensibilidade (por default: 3 heatmaps de Gini final —
+# alpha×kappa, alpha×lam, kappa×lam)
+python -m migracao sweep --periodos 200 --out out/
+python -m migracao sweep --x kappa --xvals 0.1:3:6 --y lam --yvals 0,0.5,1,1.5 --metric hhi --out out/
+
+# Ajuste dos baselines (gravitacional e radiation) à matriz O-D do modelo
+python -m migracao baselines --periodos 200 --out out/
+# ...ou a uma O-D observada (mesmo formato de od_matrix.csv)
+python -m migracao baselines --od minha_od.csv --out out/
+
+# Reescreve o dataset sintético
+python -m migracao gen-data --out data/cidades.csv
+```
+
+Qualquer parâmetro pode ser sobrescrito por flag: `--alpha`, `--kappa`, `--lam`,
+`--theta`, `--F`, `--m0`, `--seed`, `--k`, `--no-liquidity`, etc.
+
+**Saídas de `run`** (em `--out`): `panel.csv`, `flows.csv`, `metrics.csv`,
+`od_matrix.csv`, `params.json`, `fig_evolution.png` (Gini + share por período),
+`fig_flow_map.png` (fluxos dominantes no regime permanente).
+
+---
+
+## Análise
+
+- **Evolução** de Gini e share da maior cidade por período (`plot_evolution`).
+- **Mapa dos fluxos dominantes** no regime permanente (`plot_flow_map`): nós ∝
+  população final, setas ∝ fluxo acumulado.
+- **Heatmap de sensibilidade** do Gini final em `alpha`, `kappa`, `lam`
+  (`sweep` / `plot_sensitivity_heatmap`). Resultado típico: o Gini **cresce com
+  `lam`** (rede/aglomeração) e **cai com `alpha`** (congestão).
+- **Baselines** (`migracao/baselines.py`): modelo **gravitacional**
+  (`F_ij ∝ L_i L_j / d_ij^b`, ajustado por OLS no log) e **radiation model**
+  (Simini et al., 2012, livre de parâmetros), ambos normalizados às saídas
+  observadas e comparados à mesma matriz O-D por **CPC** (Common Part of
+  Commuters) e correlação de Pearson.
+
+---
+
 ## Parâmetros (`migracao.Params`)
 
 Todos os parâmetros comportamentais vivem numa `dataclass` com *defaults*
@@ -184,15 +229,21 @@ equilíbrio** — canto (poucas cidades, HHI alto) sob `alpha=0` vs. interior
 
 ```
 migracao/
-  params.py     Params (dataclass) + defaults documentados
-  cities.py     Cities, loader de CSV, dataset sintético
-  engine.py     Simulator (motor vetorizado) + SimulationResult
-  metrics.py    Gini, HHI, share, taxa bruta, distância média, O-D, CPC
+  params.py       Params (dataclass) + defaults documentados
+  cities.py       Cities, loader de CSV, dataset sintético
+  engine.py       Simulator (motor vetorizado) + SimulationResult
+  metrics.py      Gini, HHI, share, taxa bruta, distância média, O-D, CPC
+  baselines.py    gravitacional + radiation model + comparação (CPC, r)
+  sensitivity.py  varredura 2D => grade da métrica final
+  plots.py        figuras (evolução, mapa de fluxos, heatmap, baselines)
+  cli.py          CLI (run / sweep / baselines / gen-data)
+  __main__.py     python -m migracao ...
 data/
-  cidades.csv   dataset SINTÉTICO de 14 cidades
-tests/          verificações obrigatórias + auxiliares
+  cidades.csv     dataset SINTÉTICO de 14 cidades
+tests/            verificações obrigatórias + auxiliares (45 testes)
 ```
 
-> Itens em construção (próximas etapas): CLI (`python -m migracao run ...`),
-> gráficos, varredura de sensibilidade, baselines (gravitacional e *radiation
-> model*) e o módulo de calibração `calibra.py`.
+> Item em construção (próxima etapa): módulo de calibração `calibra.py` —
+> estimação de `kappa`, `lam`, `theta` por máxima verossimilhança sobre uma
+> matriz O-D observada (formato do Censo IBGE), com erros padrão e holdout de
+> pares.

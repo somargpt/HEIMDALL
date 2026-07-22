@@ -18,8 +18,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 
-# [project.scripts] — o console script `migracao` será adicionado junto com a CLI
-# (etapa seguinte: migracao/cli.py).
+[project.scripts]
+migracao = "migracao.cli:main"
 
 [tool.setuptools]
 packages = ["migracao"]
