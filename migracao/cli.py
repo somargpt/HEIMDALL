@@ -148,6 +148,56 @@ def cmd_baselines(args) -> None:
 
 
 # ----------------------------------------------------------------------
+def cmd_calibrate(args) -> None:
+    from .calibra import (calibrate, calibrate_holdout, load_od_matrix,
+                          place_value_static)
+
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    params = _params_from_args(args)
+    cities = load_cities(args.cidades)
+    d = cities.distance_matrix(normalize=True)
+    V = place_value_static(cities, params)
+
+    if args.demo:
+        # Demonstração de RECUPERAÇÃO: gera O-D a partir de parâmetros conhecidos
+        # (logit estático) e os reestima. Não são dados reais.
+        theta_t, kappa_t, lam_t = 2.0, 0.8, 0.4
+        N = Simulator(cities, params.with_(seed=3)).run(60).od_accumulated
+        off = ~np.eye(cities.n, dtype=bool)
+        eta = np.where(off, theta_t * (V[None, :] - kappa_t * d + lam_t * np.log1p(N)), -np.inf)
+        m = eta.max(1, keepdims=True)
+        P = np.exp(eta - m)
+        P = P / P.sum(1, keepdims=True)
+        rng = np.random.default_rng(params.seed)
+        od = np.vstack([rng.multinomial(5000, P[i]) for i in range(cities.n)]).astype(float)
+        print(f"[calibrate --demo] verdade: theta={theta_t} kappa={kappa_t} lam={lam_t}")
+    else:
+        if not args.od:
+            raise SystemExit("calibrate requer --od CAMINHO (ou --demo).")
+        od, _names = load_od_matrix(args.od)
+        N = load_od_matrix(args.N)[0] if args.N else None
+
+    res = calibrate_holdout(od, V, d, N=N, test_frac=args.test_frac, seed=params.seed)
+    cal = res["calibration"]
+    cal.summary_frame().to_csv(out / "calibracao.csv", index=False)
+    with open(out / "calibracao.json", "w") as fh:
+        json.dump({
+            "theta": cal.theta, "kappa": cal.kappa, "lam": cal.lam, "se": cal.se,
+            "loglik": cal.loglik, "n_migrantes": cal.n_migrantes,
+            "convergiu": cal.converged, "identifica_lam": cal.identified_lam,
+            "holdout": {k: res[k] for k in ("n_test_pairs", "cpc_oos", "corr_oos",
+                                            "pred_loglik_medio")},
+        }, fh, indent=2)
+
+    print("[calibrate] estimativas (MLE, logit condicional de destino):")
+    print(cal.summary_frame().to_string(index=False))
+    if not cal.identified_lam:
+        print("      AVISO: sem N (diáspora), lam não é identificado; estimados theta e kappa.")
+    print(f"      holdout: CPC_oos={res['cpc_oos']:.3f} corr_oos={res['corr_oos']:.3f} "
+          f"({res['n_test_pairs']} pares retidos) -> {out}/")
+
+
 def cmd_gen_data(args) -> None:
     path = write_synthetic_csv(args.out, seed=args.seed if args.seed is not None else 7)
     print(f"[gen-data] dataset sintético (14 cidades) -> {path}")
@@ -186,6 +236,17 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--od", default=None, help="CSV de matriz O-D observada (opcional)")
     _add_param_overrides(pb)
     pb.set_defaults(func=cmd_baselines)
+
+    pc = sub.add_parser("calibrate", help="estima theta/kappa/lam por MLE sobre uma O-D")
+    pc.add_argument("--od", default=None, help="CSV de matriz O-D observada (migrantes)")
+    pc.add_argument("--N", default=None, help="CSV de estoque de diáspora N_ij (opcional)")
+    pc.add_argument("--cidades", default=None, help="CSV de cidades (para calcular V)")
+    pc.add_argument("--test-frac", type=float, default=0.2, dest="test_frac")
+    pc.add_argument("--demo", action="store_true",
+                    help="demonstração: recupera parâmetros conhecidos de dados sintéticos")
+    pc.add_argument("--out", default="out")
+    _add_param_overrides(pc)
+    pc.set_defaults(func=cmd_calibrate)
 
     pg = sub.add_parser("gen-data", help="escreve o CSV sintético de 14 cidades")
     pg.add_argument("--out", default="data/cidades.csv")

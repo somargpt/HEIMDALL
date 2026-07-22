@@ -203,6 +203,39 @@ equilíbrio** — canto (poucas cidades, HHI alto) sob `alpha=0` vs. interior
 
 ---
 
+## Calibração (`migracao/calibra.py`)
+
+Estima **`theta`, `kappa`, `lam`** por **máxima verossimilhança** sobre uma matriz
+O-D observada (formato do Censo IBGE — migração de data fixa).
+
+```bash
+# Demonstração: recupera parâmetros conhecidos de dados sintéticos
+python -m migracao calibrate --demo --out out/
+
+# Workflow real: sobre uma O-D observada (+ estoque de diáspora N, opcional)
+python -m migracao calibrate --od minha_od.csv --N diaspora.csv --out out/
+```
+
+- **Identificação.** Sobre a O-D de **migrantes** (fora da diagonal), usa-se o
+  **logit condicional de destino** (condicional a migrar). Como o custo fixo `F` é
+  constante entre destinos, ele **cancela** na normalização por origem: a O-D de
+  migrantes identifica `theta`, `kappa` e `lam` — **não** `F`. O índice linear
+  `cV·V_j + cD·d_ij + cN·ln(1+N_ij)` tem log-verossimilhança **côncava** (MLE
+  único); os estruturais saem por `theta=cV`, `kappa=−cD/cV`, `lam=cN/cV`.
+- **Erros padrão** pela informação de Fisher (método delta para os estruturais).
+- **Fora da amostra**: *holdout* de pares O-D (o logit condicional é consistente
+  sob subconjuntos — IIA); reporta CPC, correlação e log-verossimilhança
+  preditiva nos pares retidos.
+- Sem `N` (diáspora), **`lam` não é identificado**: estima-se `theta` e `kappa` e
+  emite-se aviso (em linha com "não inventar dados").
+- **Pressuposto.** A calibração assume que a O-D observada é bem descrita pelo
+  logit de destino com os regressores `V`, `d`, `N` dados. Calibrar sobre a saída
+  do modelo **dinâmico** é uma má-especificação (V/N cross-seccionais não batem
+  com a trajetória) e produz coeficientes estruturais distorcidos, ainda que o
+  ajuste preditivo seja alto.
+
+---
+
 ## Limitações conhecidas
 
 - **População homogênea.** Todos os habitantes de uma origem são idênticos; não há
@@ -220,8 +253,9 @@ equilíbrio** — canto (poucas cidades, HHI alto) sob `alpha=0` vs. interior
   sintético usa "milhares de habitantes" para manter `ln(1+N)` numa faixa
   confortável. Ao usar dados reais, `theta`/`lam` devem ser recalibrados à escala.
 - **Dados sintéticos.** Nenhuma constante é calibrada empiricamente (ver o aviso no
-  topo). A calibração por máxima verossimilhança é uma etapa separada (`calibra.py`,
-  em construção).
+  topo). A calibração por máxima verossimilhança (`calibra.py`) opera sobre uma
+  matriz O-D **fornecida** pelo usuário; sem dados reais, use `--demo` (recuperação
+  de parâmetros conhecidos a partir de dados sintéticos).
 
 ---
 
@@ -236,14 +270,10 @@ migracao/
   baselines.py    gravitacional + radiation model + comparação (CPC, r)
   sensitivity.py  varredura 2D => grade da métrica final
   plots.py        figuras (evolução, mapa de fluxos, heatmap, baselines)
-  cli.py          CLI (run / sweep / baselines / gen-data)
+  calibra.py      MLE de theta/kappa/lam sobre O-D observada (+ holdout)
+  cli.py          CLI (run / sweep / baselines / calibrate / gen-data)
   __main__.py     python -m migracao ...
 data/
   cidades.csv     dataset SINTÉTICO de 14 cidades
-tests/            verificações obrigatórias + auxiliares (45 testes)
+tests/            verificações obrigatórias + auxiliares (52 testes)
 ```
-
-> Item em construção (próxima etapa): módulo de calibração `calibra.py` —
-> estimação de `kappa`, `lam`, `theta` por máxima verossimilhança sobre uma
-> matriz O-D observada (formato do Censo IBGE), com erros padrão e holdout de
-> pares.
